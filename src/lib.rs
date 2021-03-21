@@ -414,6 +414,7 @@ use std::rc::Rc;
 /// assert_eq!(ms[2]["hoge"], "3");
 /// ```
 ///
+#[derive(Debug, Clone)]
 pub struct Pattern(NodeRef);
 
 impl Pattern {
@@ -812,7 +813,7 @@ fn filter_whitespace(node: NodeRef) -> Option<NodeRef> {
         assert!(node.first_child().is_none());
 
         Some(NodeRef::new_doctype(&dt.name, &dt.public_id, &dt.system_id))
-    } else if let Some(_) = node.as_document() {
+    } else if let Some(_doc) = node.as_document() {
         let ret = NodeRef::new_document();
         for child in node.children() {
             if let Some(child) = filter_whitespace(child) {
@@ -836,15 +837,12 @@ fn filter_whitespace(node: NodeRef) -> Option<NodeRef> {
     } else if let Some(text) = node.as_text() {
         assert!(node.first_child().is_none());
 
-        let text = text.borrow();
-        let text = text.trim();
-
-        if text == "" {
+        if text.borrow().trim() == "" {
             None
         } else {
-            Some(NodeRef::new_text(text.to_owned()))
+            Some(NodeRef::new_text(text.borrow().trim().to_owned()))
         }
-    } else if let Some(_) = node.as_comment() {
+    } else if let Some(_comment) = node.as_comment() {
         assert!(node.first_child().is_none());
         None
     } else {
@@ -1129,4 +1127,30 @@ fn test_table_skip() {
     assert_eq!(ms[0]["a"], "aaa");
     assert_eq!(ms[0]["b"], "bbb");
     assert_eq!(ms[0]["d"], "ddd");
+}
+
+#[test]
+fn test_ph() {
+    let doc = reqwest::blocking::get(
+        "https://pinkhouse-webshop.jp/shopdetail/000000002386/ph/page1/recommend/",
+    )
+    .unwrap()
+    .text()
+    .unwrap();
+
+    let pat = Pattern::new(
+        r#"
+    <div class="item-detail-price2">
+        <input id="M_price2" value="{{price}}">
+    </div>
+    <div>
+        <span></span>
+        {{item_code}}
+    </div>
+"#,
+    )
+    .unwrap();
+    let ms = pat.matches(&doc);
+    assert_eq!(ms.len(), 1);
+    assert_eq!(ms[0]["price"], "440")
 }
